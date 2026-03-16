@@ -55,13 +55,12 @@ export default function App() {
     setIsProcessing(true);
 
     const img = new Image();
-    // Only set crossOrigin if it's not a data URL to avoid potential issues
     if (!image.startsWith('data:')) {
       img.crossOrigin = "anonymous";
     }
 
-    img.onerror = (e) => {
-      console.error("Failed to load image for processing", e);
+    img.onerror = () => {
+      console.error("Failed to load image");
       setIsProcessing(false);
     };
 
@@ -69,23 +68,16 @@ export default function App() {
       try {
         const canvas = canvasRef.current!;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) {
-          setIsProcessing(false);
-          return;
-        }
+        if (!ctx) throw new Error("Could not get canvas context");
 
-        // Limit max dimension for performance while maintaining aspect ratio
-        const maxDim = 1600;
+        // Limit max dimension for performance
+        const maxDim = 1200;
         let w = img.width;
         let h = img.height;
         if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = (maxDim / w) * h;
-            w = maxDim;
-          } else {
-            w = (maxDim / h) * w;
-            h = maxDim;
-          }
+          const ratio = Math.min(maxDim / w, maxDim / h);
+          w = Math.floor(w * ratio);
+          h = Math.floor(h * ratio);
         }
 
         canvas.width = w;
@@ -98,26 +90,29 @@ export default function App() {
         // 1. Grayscale
         const grayscale = new Uint8ClampedArray(w * h);
         for (let i = 0; i < data.length; i += 4) {
-          // Standard luminance formula
           grayscale[i / 4] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
         }
 
         // 2. Sobel Edge Detection
         const output = ctx.createImageData(w, h);
         const outData = output.data;
+        
+        // Initialize with white background
+        outData.fill(255);
+
         const weight = Math.max(1, Math.floor(lineWeight));
+        const thresholdVal = threshold;
 
         for (let y = weight; y < h - weight; y++) {
           for (let x = weight; x < w - weight; x++) {
             const idx = y * w + x;
+            const o = weight;
             
+            // Sobel kernels
             let gx = 0;
             let gy = 0;
 
-            // Sobel kernels with variable weight (offset)
-            const o = weight;
-            
-            // Horizontal gradient
+            // Horizontal
             gx += -1 * grayscale[(y - o) * w + (x - o)];
             gx +=  1 * grayscale[(y - o) * w + (x + o)];
             gx += -2 * grayscale[y * w + (x - o)];
@@ -125,7 +120,7 @@ export default function App() {
             gx += -1 * grayscale[(y + o) * w + (x - o)];
             gx +=  1 * grayscale[(y + o) * w + (x + o)];
 
-            // Vertical gradient
+            // Vertical
             gy += -1 * grayscale[(y - o) * w + (x - o)];
             gy += -2 * grayscale[(y - o) * w + x];
             gy += -1 * grayscale[(y - o) * w + (x + o)];
@@ -135,33 +130,20 @@ export default function App() {
 
             const magnitude = Math.sqrt(gx * gx + gy * gy);
 
-            // Thresholding: magnitude > threshold means edge (black), else background (white)
-            const isEdge = magnitude > threshold;
-            const color = isEdge ? 0 : 255;
-            
-            const pixelIdx = idx * 4;
-            outData[pixelIdx] = color;
-            outData[pixelIdx + 1] = color;
-            outData[pixelIdx + 2] = color;
-            outData[pixelIdx + 3] = 255;
-          }
-        }
-
-        // Fill in the borders that were skipped by the loop
-        for (let i = 0; i < outData.length; i += 4) {
-          if (outData[i + 3] === 0) { // If alpha is 0, it wasn't set
-            outData[i] = 255;
-            outData[i + 1] = 255;
-            outData[i + 2] = 255;
-            outData[i + 3] = 255;
+            if (magnitude > thresholdVal) {
+              const pixelIdx = idx * 4;
+              outData[pixelIdx] = 0;     // R
+              outData[pixelIdx + 1] = 0; // G
+              outData[pixelIdx + 2] = 0; // B
+              // Alpha is already 255 from fill
+            }
           }
         }
 
         ctx.putImageData(output, 0, 0);
-        const dataUrl = canvas.toDataURL('image/png');
-        setProcessedImage(dataUrl);
+        setProcessedImage(canvas.toDataURL('image/png'));
       } catch (err) {
-        console.error("Error during image processing:", err);
+        console.error("Processing error:", err);
       } finally {
         setIsProcessing(false);
       }
@@ -321,24 +303,37 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <div className="aspect-square rounded-3xl overflow-hidden bg-white border border-zinc-100 p-2 relative shadow-inner">
-                    <AnimatePresence mode="wait">
+                  <div className="aspect-square rounded-3xl overflow-hidden bg-zinc-50 border border-zinc-100 p-2 relative shadow-inner group">
+                    {/* Checkerboard background for visibility */}
+                    <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'conic-gradient(#000 0.25turn, #fff 0.25turn 0.5turn, #000 0.5turn 0.75turn, #fff 0.75turn)', backgroundSize: '20px 20px' }} />
+                    
+                    <div className="relative w-full h-full flex items-center justify-center">
                       {processedImage ? (
                         <motion.img
-                          key="processed"
+                          key={processedImage.length} // Force re-render on new image
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           src={processedImage}
                           alt="Processed"
-                          className="w-full h-full object-contain rounded-2xl"
+                          className="w-full h-full object-contain rounded-2xl shadow-sm bg-white"
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div key="loading" className="w-full h-full flex items-center justify-center">
-                          <RefreshCw size={32} className="text-zinc-100 animate-spin" />
+                        <div className="flex flex-col items-center gap-3">
+                          <RefreshCw size={32} className="text-zinc-200 animate-spin" />
+                          <span className="text-[10px] font-bold text-zinc-300 tracking-widest">PREPARING...</span>
                         </div>
                       )}
-                    </AnimatePresence>
+                    </div>
+
+                    {isProcessing && (
+                      <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center transition-opacity">
+                        <div className="bg-white/90 px-4 py-2 rounded-full shadow-sm border border-zinc-100 flex items-center gap-2">
+                          <RefreshCw size={14} className="text-emerald-500 animate-spin" />
+                          <span className="text-[10px] font-bold text-zinc-600 tracking-widest">UPDATING...</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
