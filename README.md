@@ -1,11 +1,31 @@
-<div align="center">
+# Outline Sketcher - Deployment to Vercel
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+This app is a React + Vite + Tailwind CSS application. It is ready to be deployed to Vercel.
 
-  <h1>Built with AI Studio</h2>
+## Deployment Steps
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+1. **Push to GitHub**: Upload this code to a GitHub repository.
+2. **Import to Vercel**:
+   - Go to [vercel.com](https://vercel.com).
+   - Click **"Add New"** > **"Project"**.
+   - Import your repository.
+3. **Configure Settings**:
+   - **Framework Preset**: Vercel should automatically detect **Vite**.
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+4. **Environment Variables**:
+   - If you plan to use the Gemini API in the future, add `GEMINI_API_KEY` in the Vercel project settings.
+5. **Deploy**: Click **"Deploy"**.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Local Development
 
-</div>
+```bash
+npm install
+npm run dev
+```
+
+## Build for Production
+
+```bash
+npm run build
+```
